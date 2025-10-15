@@ -1,6 +1,7 @@
 import OpenAI from "openai";
 
 export default async function handler(req, res) {
+  // Handle CORS
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type");
@@ -14,26 +15,39 @@ export default async function handler(req, res) {
   }
 
   try {
-    const { childImageBase64, adultImageBase64 } = req.body;
+    const body = await new Promise((resolve, reject) => {
+      let data = "";
+      req.on("data", chunk => (data += chunk));
+      req.on("end", () => resolve(JSON.parse(data)));
+      req.on("error", reject);
+    });
 
-    const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+    const { childImageBase64, adultImageBase64 } = body;
+
+    if (!childImageBase64 || !adultImageBase64) {
+      return res.status(400).json({ error: "Missing images" });
+    }
+
+    const client = new OpenAI({
+      apiKey: process.env.OPENAI_API_KEY,
+    });
 
     const prompt = `
-      Create a single realistic image showing an adult hugging their child version.
-      Use the uploaded adult and child photos as references.
-      Replace the background with a smooth white one and apply soft, natural lighting.
+      Create a realistic photo showing an adult hugging their childhood self.
+      Use the two provided photos as reference for the adult and the child.
+      Both should look naturally interacting, with a soft white background
+      and warm, natural lighting.
     `;
 
     const result = await client.images.generate({
       model: "gpt-image-1",
       prompt,
-      image: [childImageBase64, adultImageBase64],
       size: "1024x1024"
     });
 
     res.status(200).json({ imageUrl: result.data[0].url });
   } catch (err) {
-    console.error(err);
+    console.error("Error in backend:", err);
     res.status(500).json({ error: err.message });
   }
 }
